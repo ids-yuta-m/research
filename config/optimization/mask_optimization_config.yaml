@@ -1,0 +1,23 @@
+# マスク最適化の設定
+
+# 入出力設定
+io:
+  group_dir: "./data/raw/clustered_patches"           # 入力グループディレクトリ
+  output_dir: "./data/mask/optimized"      # 出力ディレクトリ
+  model_path: "./pre-train_epoch_12300_state_dict.pth"  # 学習済みモデルのパス
+
+# 最適化関連設定
+optimization:
+  mask_lr: 1.0e-5                       # マスク学習率
+  epochs: 3000                          # 最適化エポック数
+  lr_decay_interval: 100                # 学習率減衰間隔
+  lr_decay_rate: 0.9                    # 学習率減衰率
+  print_interval: 1000                  # 経過表示間隔
+
+# ハードウェア設定
+hardware:
+  gpu_id: "0"                           # 使用するGPU ID
+
+# モデル設定
+model:
+  patch_size: [16, 8, 8]                # パッチサイズ [t, h, w]

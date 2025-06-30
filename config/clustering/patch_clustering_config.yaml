@@ -1,0 +1,16 @@
+# パッチクラスタリングの設定
+
+# データパス設定
+input_dir: "./data/raw/16frames/gt_selected"
+output_dir: "./data/raw/clustered_patches"
+
+# クラスタリングパラメータ
+n_clusters: 1024     # クラスタ数
+patch_size: 8        # パッチサイズ (8x8)
+random_state: 42     # 乱数シード (再現性のため)
+
+# フィルタリングパラメータ
+min_patches_per_cluster: 5  # これ以下のパッチ数のクラスタは削除される
+
+# 実行パラメータ
+save_visualization: true    # クラスタリング結果のヒストグラムを保存するかどうか

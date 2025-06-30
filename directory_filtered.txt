@@ -1,0 +1,67 @@
+research/
+    ├── checkpoints/
+    │   ├── mask_selection/
+    │   └── reconstruction/
+    ├── config/
+    │   ├── optimization/
+    │   └── training/
+    │       ├── mask_selection/
+    │       └── reconstruction/
+    │           ├── model_config.yaml
+    │           └── training_config.yaml
+    ├── data/
+    │   ├── mask/
+    │   │   ├── candidates/
+    │   │   ├── optimized/
+    │   │   └── original/
+    │   ├── raw/
+    │   │   ├── 16frames/
+    │   │   │   ├── gt_gray/
+    │   │   │   ├── gt_selected/
+    │   │   │   └── test_mat/
+    │   │   └── continuous/
+    │   │       ├── gt_mat/
+    │   │       └── test_mat/
+    │   └── recon/
+    ├── model/
+    │   └── model_continue/
+    ├── models/
+    │   ├── mask_selection/
+    │   │   └── __init__.py
+    │   └── reconstruction/
+    │       ├── __init__.py
+    │       ├── ADMM_net.py
+    │       ├── LearnableMask.py
+    │       └── Unet.py
+    ├── notebooks/
+    ├── result/
+    │   └── ADMM_gray/
+    ├── results/
+    │   ├── analysis/
+    │   ├── figures/
+    │   └── logs/
+    ├── scripts/
+    │   ├── optimization/
+    │   └── training/
+    │       ├── mask_selection/
+    │       └── reconstruction/
+    │           └── train_general_recon.py
+    ├── src/
+    │   ├── clustering/
+    │   │   └── __init__.py
+    │   ├── data/
+    │   │   ├── __init__.py
+    │   │   └── preprocessing.py
+    │   ├── optimization/
+    │   │   └── __init__.py
+    │   ├── training/
+    │   │   ├── __init__.py
+    │   │   └── reconstruction_trainer.py
+    │   └── utils/
+    │       ├── __init__.py
+    │       ├── mask_utils.py
+    │       └── time_utils.py
+    ├── directory.txt
+    ├── make_directory_txt.py
+    ├── README.md
+    └── requirements.txt
