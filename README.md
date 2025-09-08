@@ -28,7 +28,7 @@
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/username/video-reconstruction.git
+git clone https://github.com/ids-yuta-m/video-reconstruction.git
 cd video-reconstruction
 
 # 依存パッケージのインストール
