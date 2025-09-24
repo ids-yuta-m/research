@@ -31,136 +31,7 @@ MASK_DIR = "/home/yuta-m/research-github/data/masks/candidates/16masks"
 GT_DIR = "/home/yuta-m/research-github/data/raw/256x256/gt_gray"
 ADMM_MODEL_PATH = "/home/yuta-m/research-github/checkpoints/reconstruction/universal/2025_09_07_12_18_59/adaptive_admm_net_epoch_2000_26.59dB.pth"  # 事前学習済みUniversalADMM_netのパス
 
-class MaskSelectionNet(nn.Module):
-    """各パッチに対して候補マスクの選択確率を出力するモデル"""
-    
-    def __init__(self, num_candidates, patch_grid_size=32):
-        super().__init__()
-        self.num_candidates = num_candidates
-        self.patch_grid_size = patch_grid_size  # 32x32のパッチグリッド
-        
-        # 特徴抽出器（ResNetベースのエンコーダー）
-        self.feature_extractor = nn.Sequential(
-            # 初期畳み込み層
-            nn.Conv2d(16, 64, kernel_size=7, stride=2, padding=3),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),  # 256x256 -> 64x64
-            
-            # ResBlockライクな構造
-            self._make_layer(64, 128, 2, stride=2),   # 64x64 -> 32x32
-            self._make_layer(128, 256, 2, stride=1),  # 32x32を維持
-            self._make_layer(256, 256, 2, stride=1),  # 32x32を維持
-        )
-        
-        # パッチレベルの特徴を強化
-        self.patch_enhancer = nn.Sequential(
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-        )
-        
-        # マスク選択ヘッド
-        self.mask_selector = nn.Sequential(
-            nn.Conv2d(256, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, num_candidates, kernel_size=1),  # [B, num_candidates, 32, 32]
-        )
-        
-        # 初期化
-        self.apply(self._init_weights)
-    
-    def _make_layer(self, in_planes, planes, num_blocks, stride):
-        """ResNetスタイルのブロック作成"""
-        layers = []
-        layers.append(BasicBlock(in_planes, planes, stride))
-        for _ in range(1, num_blocks):
-            layers.append(BasicBlock(planes, planes))
-        return nn.Sequential(*layers)
-    
-    def _init_weights(self, m):
-        """重み初期化"""
-        if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm2d):
-            nn.init.constant_(m.weight, 1)
-            nn.init.constant_(m.bias, 0)
-    
-    def forward(self, x):
-        """
-        Args:
-            x: [B, 16, 256, 256] - 入力ビデオフレーム
-        
-        Returns:
-            mask_logits: [B, num_candidates, 32, 32] - 各パッチでの候補マスクの選択ログ確率
-            mask_probs: [B, num_candidates, 32, 32] - 各パッチでの候補マスクの選択確率
-        """
-        # 特徴抽出
-        features = self.feature_extractor(x)  # [B, 256, 32, 32]
-        
-        # パッチレベル特徴強化
-        enhanced_features = self.patch_enhancer(features)  # [B, 256, 32, 32]
-        
-        # マスク選択ロジット
-        mask_logits = self.mask_selector(enhanced_features)  # [B, num_candidates, 32, 32]
-        
-        # ソフトマックスで確率に変換（パッチごとに独立）
-        mask_probs = F.softmax(mask_logits, dim=1)  # [B, num_candidates, 32, 32]
-        
-        return mask_logits, mask_probs
 
-class BasicBlock(nn.Module):
-    """ResNetの基本ブロック"""
-    
-    def __init__(self, in_planes, planes, stride=1):
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_planes != planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes)
-            )
-    
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-def load_candidate_masks(mask_dir):
-    """候補マスクを読み込む"""
-    mask_files = glob.glob(os.path.join(mask_dir, "*.mat"))
-    candidate_masks = []
-    
-    print(f"Loading {len(mask_files)} candidate masks...")
-    for mask_file in tqdm(mask_files):
-        mask_data = sio.loadmat(mask_file)
-        key = [k for k in mask_data.keys() if not k.startswith('_')][0]
-        mask = mask_data[key]  # [16, 8, 8]
-        
-        mask = np.array(mask, dtype=np.float32)
-        if mask.shape != (16, 8, 8):
-            if mask.ndim == 3:
-                if mask.shape == (8, 8, 16):
-                    mask = mask.transpose(2, 0, 1)
-                elif mask.shape == (8, 16, 8):
-                    mask = mask.transpose(1, 0, 2)
-        
-        candidate_masks.append(torch.tensor(mask, dtype=torch.float32))
-    
-    return candidate_masks
 
 def create_mask_from_selection(candidate_masks, selection_indices, patch_size=8, full_size=256):
     """
@@ -195,45 +66,32 @@ def create_mask_from_selection(candidate_masks, selection_indices, patch_size=8,
 
 def sample_masks_from_probs(mask_probs, candidate_masks):
     """
-    確率分布からマスクをサンプリング
-    
-    Args:
-        mask_probs: [B, num_candidates, 32, 32] - 各パッチでの選択確率
-        candidate_masks: list of candidate masks
-    
-    Returns:
-        sampled_masks: [B, 16, 256, 256] - サンプリングされたマスク
-        sampled_indices: [B, 32, 32] - サンプリングされたインデックス
-        log_probs: [B, 32, 32] - サンプリングのログ確率
+    高速版: torch.multinomial を使って一括サンプリング
     """
     B, num_candidates, H, W = mask_probs.shape
+
+    # (B, num_candidates, H, W) → (B*H*W, num_candidates)
+    probs = mask_probs.permute(0, 2, 3, 1).reshape(-1, num_candidates)
+
+    # 一括サンプリング
+    sampled_indices = torch.multinomial(probs, 1).squeeze(-1)  # [B*H*W]
+
+    # ログ確率も計算
+    log_probs = torch.gather(torch.log(probs + 1e-12), 1, sampled_indices.unsqueeze(-1)).squeeze(-1)  # [B*H*W]
+
+    # 元の形に戻す
+    sampled_indices = sampled_indices.view(B, H, W)  # [B, H, W]
+    log_probs = log_probs.view(B, H, W)             # [B, H, W]
+
+    # 各サンプルについて [16, 256, 256] のマスクを作成
     sampled_masks = []
-    sampled_indices = torch.zeros(B, H, W, dtype=torch.long, device=mask_probs.device)
-    log_probs = torch.zeros(B, H, W, device=mask_probs.device)
-    
     for b in range(B):
-        batch_indices = torch.zeros(H, W, dtype=torch.long, device=mask_probs.device)
-        batch_log_probs = torch.zeros(H, W, device=mask_probs.device)
-        
-        for i in range(H):
-            for j in range(W):
-                # 各パッチでカテゴリカル分布からサンプリング
-                probs = mask_probs[b, :, i, j]
-                dist = Categorical(probs)
-                sampled_idx = dist.sample()
-                
-                batch_indices[i, j] = sampled_idx
-                batch_log_probs[i, j] = dist.log_prob(sampled_idx)
-        
-        # 完全なマスクを作成
-        full_mask = create_mask_from_selection(candidate_masks, batch_indices)
+        full_mask = create_mask_from_selection(candidate_masks, sampled_indices[b])
         sampled_masks.append(full_mask)
-        
-        sampled_indices[b] = batch_indices
-        log_probs[b] = batch_log_probs
-    
     sampled_masks = torch.stack(sampled_masks)
+
     return sampled_masks, sampled_indices, log_probs
+
 
 def calculate_psnr(img1, img2):
     """PSNR計算"""
@@ -275,7 +133,7 @@ def train_mask_selection_model():
     """マスク選択モデルの学習"""
     print("Loading data...")
     candidate_masks = load_candidate_masks(MASK_DIR)
-    gt_data = load_ground_truth_data(GT_DIR)  # メモリ節約のため制限
+    gt_data = load_ground_truth_data(GT_DIR)  
     
     num_candidates = len(candidate_masks)
     print(f"Loaded {num_candidates} candidate masks")
@@ -318,18 +176,24 @@ def train_mask_selection_model():
         epoch_loss = 0.0
         num_batches = 0
         
-        print(f"\rTraining Epoch: {epoch}/{num_epochs}", end="", flush=True)
+        print(f"\rTraining Epoch: {epoch}/{num_epochs}\n", end="", flush=True)
+        
+        total_files = len(gt_data)
         
         for batch_start in range(0, len(gt_data), batch_size):
             batch_end = min(batch_start + batch_size, len(gt_data))
             batch_gt = gt_data[batch_start:batch_end]
             batch_gt = torch.stack(batch_gt).to(device)
             
+            processed = batch_end
+            
+            print(f"Epoch {epoch}/{num_epochs}  Progress: {processed}/{total_files}", end="\r", flush=True)
+            
             optimizer.zero_grad()
             
             with torch.no_grad():
                 # 前回のモデル状態を保存（比較用）
-                prev_model_state = {name: param.clone() for name, param in selection_model.named_parameters()}
+                prev_model_state = selection_model.state_dict()
             
             # 現在のモデルでマスク選択
             mask_logits, mask_probs = selection_model(batch_gt)
@@ -345,8 +209,7 @@ def train_mask_selection_model():
                 # 前回のモデル状態を復元
                 with torch.no_grad():
                     temp_model = MaskSelectionNet(num_candidates=num_candidates).to(device)
-                    temp_model.load_state_dict({name: prev_model_state.get(name, param) 
-                                              for name, param in temp_model.named_parameters()})
+                    temp_model.load_state_dict(prev_model_state)
                     temp_model.eval()
                     
                     _, prev_mask_probs = temp_model(batch_gt)
