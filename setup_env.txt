@@ -1,2 +1,6 @@
 C:\venvs\research-env\Scripts\activate
 cd C:\Users\yuta-home\research
+
+git add -A
+git commit -m "comment"
+git push

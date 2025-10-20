@@ -351,8 +351,8 @@ def train_adaptive_admm_net():
     print(f"Trainable parameters: {trainable_params:,}")
     
     # 学習率設定
-    mask_lr = 0.00005
-    recon_lr = 0.00005
+    mask_lr = 0.0001
+    recon_lr = 0.0001
     
     # オプティマイザの分離（既存コードと同様）
     mask_optimizer = torch.optim.Adam([

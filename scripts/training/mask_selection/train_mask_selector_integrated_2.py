@@ -212,19 +212,10 @@ def train_mask_selection_model_fixed_baseline():
             
             optimizer.zero_grad()
             
-            # # === デバッグ: 勾配追跡のチェック ===
-            # print(f"\n=== GRADIENT DEBUG at epoch {epoch}, batch {batch_start//batch_size} ===")
-            
             # === 学習モデルでマスク選択 ===
             mask_logits, mask_probs = selection_model(batch_gt)
             
-            # print(f"mask_logits requires_grad: {mask_logits.requires_grad}")
-            # print(f"mask_probs requires_grad: {mask_probs.requires_grad}")
-            
             learned_masks, learned_indices, learned_log_probs = sample_masks_with_exploration(mask_probs, candidate_masks)
-            
-            # print(f"learned_log_probs requires_grad: {learned_log_probs.requires_grad}")
-            # print(f"learned_log_probs grad_fn: {learned_log_probs.grad_fn}")
             
             # === 固定ベースライン（ランダムマスク）を生成 ===
             random_masks = []
@@ -254,9 +245,6 @@ def train_mask_selection_model_fixed_baseline():
             
             batch_rewards = torch.tensor(batch_rewards, device=device)
             
-            # print(f"batch_rewards requires_grad: {batch_rewards.requires_grad}")
-            # print(f"baseline_reward type: {type(baseline_reward)}, value: {baseline_reward}")
-            
             avg_reward = batch_rewards.mean().item()
             
             # ベースライン更新（移動平均）
@@ -265,90 +253,21 @@ def train_mask_selection_model_fixed_baseline():
             # === REINFORCEポリシー損失計算 ===
             advantages = batch_rewards - baseline_reward
             
-            # print(f"advantages requires_grad: {advantages.requires_grad}")
-            # print(f"advantages grad_fn: {advantages.grad_fn}")
-            
             policy_loss = 0.0
             patch_loss = 0.0
             
             for b in range(len(batch_gt)):
                 
-                # print(f"\nSample {b}:")
-                # print(f"  learned_log_probs[{b}] requires_grad: {learned_log_probs[b].requires_grad}")
-                # print(f"  learned_log_probs[{b}] grad_fn: {learned_log_probs[b].grad_fn}")
-                # print(f"  advantages[{b}] requires_grad: {advantages[b].requires_grad}")
-                # print(f"  advantages[{b}] value: {advantages[b].item():.6f}")
-                
                 detached_advantage = advantages[b].detach()
-                # print(f"  detached_advantage requires_grad: {detached_advantage.requires_grad}")
                 
                 # 各パッチでの対数確率にadvantageを掛けて平均
                 weighted_log_probs = -learned_log_probs[b] * detached_advantage
                 
-                # print(f"  weighted_log_probs requires_grad: {weighted_log_probs.requires_grad}")
-                # print(f"  weighted_log_probs grad_fn: {weighted_log_probs.grad_fn}")
-                
                 patch_loss += weighted_log_probs.mean()
-                
-                # print(f"  patch_loss requires_grad: {patch_loss.requires_grad}")
-                # print(f"  patch_loss grad_fn: {patch_loss.grad_fn}")
                 
                 policy_loss += patch_loss
             
             policy_loss = policy_loss / len(batch_gt)
-            
-            # print(f"\nFinal policy_loss requires_grad: {policy_loss.requires_grad}")
-            # print(f"Final policy_loss grad_fn: {policy_loss.grad_fn}")
-            # print(f"Final policy_loss value: {policy_loss.item():.6f}")
-            
-            
-            
-            # # デバッグ情報（詳細版）
-            # if epoch == 1 and batch_start == 0:
-            #     print(f"\nDETAILED DEBUG INFO:")
-            #     print(f"Batch rewards: {batch_rewards}")
-            #     print(f"Baseline reward: {baseline_reward:.6f}")
-            #     print(f"Advantages: {advantages}")
-            #     print(f"Log probs shape: {learned_log_probs[0].shape}")
-            #     print(f"Log probs range: [{learned_log_probs[0].min().item():.4f}, {learned_log_probs[0].max().item():.4f}]")
-            #     print(f"Sample log prob values: {learned_log_probs[0][0, 0]:.4f}, {learned_log_probs[0][15, 15]:.4f}")
-                
-            #     # 各サンプルの詳細
-            #     for i in range(len(batch_gt)):
-            #         sample_loss = (-learned_log_probs[i] * advantages[i].detach()).mean()
-            #         print(f"Sample {i}: advantage={advantages[i].item():.4f}, sample_loss={sample_loss.item():.6f}")
-                
-            #     print(f"Policy loss value: {policy_loss.item():.6f}")
-            #     print(f"Policy loss requires_grad: {policy_loss.requires_grad}")
-            
-            # # 追加のログ出力（最初の数エポック）
-            # if epoch <= 5:
-            #     print(f"Epoch {epoch}, Batch {batch_start//batch_size}: "
-            #           f"Avg Reward: {avg_reward:.4f}, "
-            #           f"Baseline: {baseline_reward:.4f}, "
-            #           f"Policy Loss: {policy_loss.item():.6f}")
-            
-            # # policy_lossが勾配計算可能かチェック
-            # if not policy_loss.requires_grad:
-            #     print(f"Warning: policy_loss does not require grad at epoch {epoch}")
-            #     continue
-            
-            # # 6. モデルパラメータの勾配設定チェック
-            # print(f"\nModel parameters gradient status:")
-            # for name, param in selection_model.named_parameters():
-            #     print(f"  {name}: requires_grad={param.requires_grad}")
-            #     if not param.requires_grad:
-            #         print(f"    WARNING: Parameter {name} does not require grad!")
-                    
-            # # 最初の数バッチのみデバッグ出力
-            # if epoch == 1 and batch_start < 2 * batch_size:
-            #     print("="*80)
-            #     input("Press Enter to continue...")
-            
-            # # policy_lossが勾配を持たない場合はスキップ
-            # if not policy_loss.requires_grad:
-            #     print(f"SKIPPING backward pass: policy_loss does not require grad")
-            #     continue
             
             # 逆伝播
             policy_loss.backward()
